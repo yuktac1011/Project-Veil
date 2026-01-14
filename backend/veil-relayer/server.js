@@ -1,120 +1,100 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const { ethers } = require('ethers');
-const VeilABI = require('./abi/Veil.json');
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const { ethers } = require("ethers");
+const VeilABI = require("./abi/Veil.json");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // 1. MIDDLEWARE SETUP
-app.use(helmet()); // Security headers
-app.use(cors()); // Allow Frontend to hit this API
-app.use(express.json()); // Parse JSON bodies
+app.use(helmet());
+app.use(cors());
+app.use(express.json());
 
 // 2. BLOCKCHAIN SETUP
-// Connect to the provider (Localhost or Testnet)
 const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-
-// Create a Wallet instance using the Relayer's Private Key
-const relayerWallet = new ethers.Wallet(process.env.RELAYER_PRIVATE_KEY, provider);
-
-// Connect to the deployed Smart Contract
+const relayerWallet = new ethers.Wallet(
+  process.env.RELAYER_PRIVATE_KEY,
+  provider
+);
 const veilContract = new ethers.Contract(
-    process.env.CONTRACT_ADDRESS,
-    VeilABI,
-    relayerWallet // Connects the wallet so we can write/sign transactions
+  process.env.CONTRACT_ADDRESS,
+  VeilABI,
+  relayerWallet
 );
 
-// 3. RATE LIMITER (The Anti-Spam "Moat")
-// Limit IP to 5 requests per hour to protect Relayer funds
+// 3. RATE LIMITER
 const submissionLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 5, 
-    message: { success: false, error: "Too many requests from this IP. Try again later." }
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: {
+    success: false,
+    error: "Too many requests from this IP. Try again later.",
+  },
 });
 
 // 4. API ENDPOINT
-app.post('/api/submit-report', submissionLimiter, async (req, res) => {
-    try {
-        console.log("--> Receiving Report Submission...");
+app.post("/api/submit-report", submissionLimiter, async (req, res) => {
+  try {
+    const { proofData, ipfsCid } = req.body;
 
-        const { 
-            merkleTreeRoot, 
-            nullifierHash, 
-            externalNullifier, 
-            proof, 
-            ipfsCid 
-        } = req.body;
-
-        // Basic Validation
-        if (!ipfsCid || !proof || proof.length !== 8) {
-            return res.status(400).json({ success: false, error: "Invalid Data Format" });
-        }
-
-        console.log(`--> Processing CID: ${ipfsCid}`);
-        console.log(`--> Relayer Wallet: ${relayerWallet.address}`);
-
-        // 5. EXECUTE TRANSACTION
-        // We attach 0.01 ETH as the 'Stake' (Value)
-        const stakeAmount = ethers.parseEther("0.01");
-
-        const tx = await veilContract.submitReport(
-            merkleTreeRoot,
-            nullifierHash,
-            externalNullifier,
-            proof,
-            ipfsCid,
-            { value: stakeAmount } // THIS IS THE PENALTY STAKE
-        );
-
-        console.log(`--> Transaction Sent! Hash: ${tx.hash}`);
-
-        // Wait for 1 confirmation
-        const receipt = await tx.wait(1);
-
-        console.log(`--> Transaction Confirmed in Block: ${receipt.blockNumber}`);
-
-        // 6. RETURN SUCCESS
-        res.status(200).json({
-            success: true,
-            message: "Report successfully submitted to blockchain.",
-            transactionHash: tx.hash,
-            blockNumber: receipt.blockNumber
-        });
-
-    } catch (error) {
-        console.error("--> Submission Failed:", error);
-
-        // Handle specific Blockchain errors (e.g., execution reverted)
-        let errorMessage = "Internal Server Error";
-        
-        if (error.code === 'INSUFFICIENT_FUNDS') {
-            errorMessage = "Relayer Wallet out of funds";
-        } else if (error.reason) {
-            errorMessage = `Blockchain Revert: ${error.reason}`;
-        }
-
-        res.status(500).json({
-            success: false,
-            error: errorMessage
-        });
+    // Validation
+    if (!proofData || !ipfsCid) {
+      return res.status(400).json({ error: "Missing Proof or CID" });
     }
+
+    const { nullifierSeed, nullifier, signal, groth16Proof } = proofData;
+
+    // Sanity check for array structure (Standard Groth16 is 8 points for Solidity)
+    if (!Array.isArray(groth16Proof) || groth16Proof.length !== 8) {
+         return res.status(400).json({ error: "Invalid Proof Format" });
+    }
+
+    console.log(`--> Submitting Aadhaar Proof for CID: ${ipfsCid}`);
+    console.log(`--> Signal in Proof: ${signal}`);
+    console.log(`--> Relayer Wallet: ${relayerWallet.address}`);
+
+    // 5. EXECUTE TRANSACTION
+    // The Smart Contract call
+    const tx = await veilContract.submitReport(
+      nullifierSeed,
+      nullifier,
+      signal,
+      groth16Proof,
+      ipfsCid,
+      { value: ethers.parseEther("0.001") } // Gas/Stake
+    );
+
+    console.log(`--> Transaction Sent! Hash: ${tx.hash}`);
+
+    await tx.wait(1);
+
+    console.log(`--> Transaction Confirmed`);
+
+    res.json({ success: true, txHash: tx.hash });
+  } catch (error) {
+    console.error("Relay Error:", error);
+    
+    let msg = error.message;
+    if(error.reason) msg = `Revert: ${error.reason}`;
+    
+    res.status(500).json({ success: false, error: msg });
+  }
 });
 
 // Health Check
-app.get('/', (req, res) => {
-    res.send('Project VEIL Relayer is Running. Privacy enabled.');
+app.get("/", (req, res) => {
+  res.send("Project VEIL Relayer is Running. Privacy enabled.");
 });
 
 // START SERVER
 app.listen(PORT, () => {
-    console.log(`\n=== PROJECT VEIL RELAYER ===`);
-    console.log(`Status: Online`);
-    console.log(`Port: ${PORT}`);
-    console.log(`RPC: ${process.env.RPC_URL}`);
-    console.log(`============================\n`);
+  console.log(`\n=== PROJECT VEIL RELAYER ===`);
+  console.log(`Status: Online`);
+  console.log(`Port: ${PORT}`);
+  console.log(`RPC: ${process.env.RPC_URL}`);
+  console.log(`============================\n`);
 });
-
