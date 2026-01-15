@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { deriveIdentityFromNullifier } from "../utils/crypto";
 import { motion, AnimatePresence } from "framer-motion";
 import { Shield, Building2 } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
@@ -19,10 +20,16 @@ export const AuthPage = () => {
   const [anonAadhaar] = useAnonAadhaar();
   const navigate = useNavigate();
 
+
+
+  // ... existing imports ...
+
+  // ...
+
   // Watch for Anon Aadhaar login status
   useEffect(() => {
     if (anonAadhaar.status === "logged-in") {
-      console.log("✅ Anon Aadhaar Verified!");
+      console.log("✅ Anon Aadhaar Verified!", anonAadhaar);
 
       // Extract real identity from the ZK proof
       const pcdWrapper = Object.values(anonAadhaar.anonAadhaarProofs || {})[0];
@@ -55,7 +62,7 @@ export const AuthPage = () => {
       createIdentity(realIdentity, "123456");
       navigate("/dashboard");
     }
-  }, [anonAadhaar.status, createIdentity, navigate]);
+  }, [anonAadhaar.status, createIdentity, navigate, anonAadhaar]);
 
   const handleUnlock = async (passcode: string) => {
     setIsLoading(true);
