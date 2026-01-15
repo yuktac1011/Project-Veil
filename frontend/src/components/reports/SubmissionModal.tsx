@@ -18,6 +18,7 @@ import { uploadToIPFS } from "../../utils/ipfs";
 import { useAuthStore } from "../../store/useAuthStore";
 // FIX: Removed 'packGroth16ProofFromPCD' import causing the error
 import { useAnonAadhaar } from '@anon-aadhaar/react';
+import { analyzeContent } from "../../utils/AIFilter";
 
 const AUTHORITY_PUBLIC_KEY =
   "048318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed753547f11ca8696646f2f3acb08e31016afac23e630c5d11f59f61fef57b0d2aa5";
@@ -72,6 +73,15 @@ export const SubmissionModal = ({ isOpen, onClose }: SubmissionModalProps) => {
     setLogs([]);
 
     try {
+      // 0. AI Content Analysis (Client-Side)
+      addLog("🤖 AI analyzing report content...");
+      const aiResult = await analyzeContent(formData.title, formData.description);
+      
+      if (aiResult.isSpam) {
+        throw new Error(`AI Flagged as Spam: ${aiResult.issues[0]}`);
+      }
+      addLog("✅ AI Check Passed");
+
       // 1. Verify Login Status
       if (anonAadhaar.status !== "logged-in") {
         throw new Error("Please verify with Anon Aadhaar first");
@@ -83,65 +93,72 @@ export const SubmissionModal = ({ isOpen, onClose }: SubmissionModalProps) => {
         ...formData,
         timestamp: Date.now(),
         authorPublicKey: identity?.publicKey || "0x0", 
-      };
-
-      // Helper to convert hex string to Uint8Array
-      const hexToUint8Array = (hexString: string) => {
-        if (hexString.length % 2 !== 0) {
-          throw new Error("Invalid hex string");
-        }
-        const arrayBuffer = new Uint8Array(hexString.length / 2);
-        for (let i = 0; i < hexString.length; i += 2) {
-          arrayBuffer[i / 2] = parseInt(hexString.substr(i, 2), 16);
-        }
-        return arrayBuffer;
+        aiAnalysis: aiResult,
       };
 
       const encrypted = await EthCrypto.encryptWithPublicKey(
-        hexToUint8Array(AUTHORITY_PUBLIC_KEY) as any,
+        AUTHORITY_PUBLIC_KEY,
         JSON.stringify(payload)
       );
       const encryptedString = EthCrypto.cipher.stringify(encrypted);
       addLog("🔐 Report encrypted with ECIES");
 
-      // 3. IPFS Upload
-      addLog("☁️ Uploading encrypted payload to IPFS...");
-      const ipfsCid = await uploadToIPFS({ content: encryptedString });
-      addLog(`✅ Uploaded to IPFS: ${ipfsCid}`);
-
-      // 4. Extract and Format ZK Proof
+      // 3. Extract and Format ZK Proof (Moved BEFORE IPFS for Offline Capability)
       addLog("🔄 Packaging Anon Aadhaar Proof...");
       
-      // FIX: Manually extract proof from state since utility is missing
       if (!anonAadhaar.anonAadhaarProofs || Object.keys(anonAadhaar.anonAadhaarProofs).length === 0) {
           throw new Error("No proofs found in session");
       }
 
-      // Get the latest proof object (PCD)
       const pcdWrapper = Object.values(anonAadhaar.anonAadhaarProofs)[0];
-      const pcd = JSON.parse(pcdWrapper.pcd); // The inner JSON string
-      
-      // Extract data needed for solidity
+      const pcd = JSON.parse(pcdWrapper.pcd); 
       const { claim } = pcd;
       let { proof } = pcd;
-      
-      // Handle nested proof structure
-      const proofData = proof.groth16Proof || proof;
-
-      // Format Groth16 Proof for Solidity
+      const proofDataRaw = proof.groth16Proof || proof;
       const groth16Proof = [
-          proofData.pi_a[0], proofData.pi_a[1],
-          proofData.pi_b[0][1], proofData.pi_b[0][0],
-          proofData.pi_b[1][1], proofData.pi_b[1][0],
-          proofData.pi_c[0], proofData.pi_c[1]
+          proofDataRaw.pi_a[0], proofDataRaw.pi_a[1],
+          proofDataRaw.pi_b[0][1], proofDataRaw.pi_b[0][0],
+          proofDataRaw.pi_b[1][1], proofDataRaw.pi_b[1][0],
+          proofDataRaw.pi_c[0], proofDataRaw.pi_c[1]
       ];
-
       addLog("✅ Proof packaged for Blockchain");
 
-      // 5. Submit to Relayer
-      // NOTE: We must use the signal found in the proof. 
+      // 4. IPFS Upload (With Offline Fallback)
+      let ipfsCid = "";
+      try {
+        addLog("☁️ Uploading encrypted payload to IPFS...");
+        ipfsCid = await uploadToIPFS({ content: encryptedString });
+        addLog(`✅ Uploaded to IPFS: ${ipfsCid}`);
+      } catch (uploadError) {
+        if (!navigator.onLine) {
+            addLog("⚠️ Offline: Saving to Outbox Queue...");
+            const { addToQueue } = useReportStore.getState();
+            addToQueue({
+                id: `queued_${Date.now()}`,
+                encryptedString,
+                proofData: {
+                  nullifierSeed: proof.nullifierSeed,
+                  nullifier: proof.nullifier,
+                  signal: claim.signal || claim.signalHash || "1",
+                  groth16Proof
+                },
+                formData: {
+                    title: formData.title,
+                    category: formData.category,
+                    severity: formData.severity
+                },
+                timestamp: new Date().toISOString()
+            });
+            // Fake Delay
+            await new Promise(r => setTimeout(r, 1000));
+            setStep("success"); // We treat queued as "success" for the modal, but with different UI potentially
+            return;
+        }
+        throw uploadError;
+      }
+
+      // 5. Submit to Relayer (Online Only)
       const response = await api.submitReport({
-        ...formData,
         proofData: {
           nullifierSeed: proof.nullifierSeed,
           nullifier: proof.nullifier,
@@ -153,9 +170,7 @@ export const SubmissionModal = ({ isOpen, onClose }: SubmissionModalProps) => {
       });
 
       if (response.success) {
-        // Save to local persistence for "My Reports"
         const { addReport } = useReportStore.getState();
-        
         addReport({
           id: response.data?.reportId || `local_${Date.now()}`,
           title: formData.title,
@@ -454,8 +469,10 @@ export const SubmissionModal = ({ isOpen, onClose }: SubmissionModalProps) => {
                     Report Submitted
                   </h3>
                   <p className="text-zinc-400">
-                    Your report has been successfully broadcasted to the
-                    network. You can track its status in your dashboard.
+                    { !navigator.onLine ? 
+                      "Your report has been securely encrypted and queued. It will automatically upload when you are back online." :
+                      "Your report has been successfully broadcasted to the network. You can track its status in your dashboard."
+                    }
                   </p>
                 </div>
                 <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 text-left">

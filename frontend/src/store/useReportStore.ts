@@ -20,12 +20,28 @@ export interface Report {
   severity?: string;
 }
 
+export interface QueuedReport {
+  id: string;
+  encryptedString: string;
+  proofData: any;
+  formData: {
+    title: string;
+    category: string;
+    severity: string;
+  };
+  timestamp: string;
+}
+
 interface ReportState {
   reports: Report[];
+  queue: QueuedReport[];
   activities: Activity[];
   anonymityScore: number;
   addActivity: (activity: Omit<Activity, 'id' | 'timestamp'>) => void;
   addReport: (report: Report) => void;
+  updateReportStatus: (id: string, status: Report['status']) => void;
+  addToQueue: (item: QueuedReport) => void;
+  removeFromQueue: (id: string) => void;
   clearHistory: () => void;
 }
 
@@ -33,6 +49,7 @@ export const useReportStore = create<ReportState>()(
   persist(
     (set) => ({
       reports: [],
+      queue: [],
       activities: [],
       anonymityScore: 100, // Start with perfect score for new users
       
@@ -49,6 +66,18 @@ export const useReportStore = create<ReportState>()(
 
       addReport: (report) => set((state) => ({
         reports: [report, ...state.reports]
+      })),
+
+      updateReportStatus: (id, status) => set((state) => ({
+        reports: state.reports.map(r => r.id === id ? { ...r, status } : r)
+      })),
+
+      addToQueue: (item) => set((state) => ({
+        queue: [...state.queue, item]
+      })),
+
+      removeFromQueue: (id) => set((state) => ({
+        queue: state.queue.filter(q => q.id !== id)
       })),
 
       clearHistory: () => set({ reports: [], activities: [], anonymityScore: 100 })

@@ -50,7 +50,7 @@ export const api = {
   /**
    * Submit a new anonymous report
    */
-  submitReport: async (report: any): Promise<ApiResponse<ReportSubmission>> => {
+  submitReport: async (report: any): Promise<ApiResponse<{ reportId: string; txHash: string }>> => {
     try {
         const res = await axios.post(`${API_URL}/submit-report`, report);
         return { success: true, data: res.data };
@@ -60,6 +60,15 @@ export const api = {
             success: false, 
             error: error.response?.data?.error || error.message || 'Submission failed' 
         };
+    }
+  },
+
+  getReportStatus: async (reportId: string): Promise<ApiResponse<{ status: string }>> => {
+    try {
+        const response = await axios.get(`${API_URL}/report/${reportId}/status`);
+        return response.data;
+    } catch (error) {
+        return { success: false, error: 'Fetch failed' };
     }
   },
 

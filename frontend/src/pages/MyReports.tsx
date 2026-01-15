@@ -17,6 +17,7 @@ import {
   Database,
   Fingerprint
 } from 'lucide-react';
+import { api } from '../api/api';
 import { useNavigate } from 'react-router-dom';
 import { useReportStore, Report } from '../store/useReportStore';
 import { Button } from '../components/ui/Button';
@@ -41,8 +42,39 @@ export const MyReports = () => {
   const statusIcons = {
     pending: <Clock size={14} className="text-amber-500" />,
     verified: <CheckCircle2 size={14} className="text-emerald-500" />,
-    rejected: <XCircle size={14} className="text-red-500" />
+    rejected: <XCircle size={14} className="text-red-500" />,
+    flagged: <AlertCircle size={14} className="text-orange-500" />,
+    spam: <XCircle size={14} className="text-red-500" />
   };
+
+  // Poll for status updates for pending reports
+  React.useEffect(() => {
+    const checkStatuses = async () => {
+      const pendingReports = reports.filter(r => r.status === 'pending');
+      console.log(`[MyReports] Polling statuses for ${pendingReports.length} reports`);
+      
+      for (const report of pendingReports) {
+        try {
+          const res = await api.getReportStatus(report.id);
+          const newStatus = res.data?.status;
+          
+          console.log(`[MyReports] Status for ${report.id}:`, newStatus);
+          
+          if (res.success && newStatus && newStatus !== report.status) {
+             console.log(`[MyReports] Updating ${report.id} to ${newStatus}`);
+             useReportStore.getState().updateReportStatus(report.id, newStatus as any);
+          }
+        } catch (e) {
+          console.error(`Failed to check status for ${report.id}`, e);
+        }
+      }
+    };
+    
+    checkStatuses();
+    // Optional: Set up an interval or just run on mount
+    const interval = setInterval(checkStatuses, 10000); // Check every 10s
+    return () => clearInterval(interval);
+  }, [reports]);
 
   return (
     <div className="space-y-8">

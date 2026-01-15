@@ -18,6 +18,7 @@ import { AdminSidebar } from './components/admin/AdminSidebar';
 import { CookieBanner } from './components/ui/CookieBanner';
 import { ErrorBoundary } from './components/error/ErrorBoundary';
 import { useAuthStore } from './store/useAuthStore';
+import { OfflineSync } from './components/OfflineSync';
 
 const ProtectedRoute = ({ 
   children, 
@@ -201,6 +202,7 @@ function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
         <CookieBanner />
+        <OfflineSync />
       </Router>
     </ErrorBoundary>
   );

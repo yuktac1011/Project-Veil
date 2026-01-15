@@ -8,7 +8,7 @@ async function check() {
     console.log("Wallet Public Key:", pubKey);
     console.log("Wallet Public Key Length:", pubKey.length);
 
-    const brokenKey = "0406738e36ff52a16c5c6f196ab64fb99da869f37285badbfc096caaa7e9663593e234379cc985de2665c485e88f1ea775ff0658ee8b900ca9";
+    const brokenKey = "048318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed753547f11ca8696646f2f3acb08e31016afac23e630c5d11f59f61fef57b0d2aa5";
     
     // Check if brokenKey is a substring
     if (pubKey.includes(brokenKey)) {
