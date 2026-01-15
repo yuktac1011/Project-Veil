@@ -13,7 +13,6 @@ import {
 import { Button } from "../ui/Button";
 import { api } from "../../api/api";
 import { useReportStore } from "../../store/useReportStore";
-import { ethers } from "ethers";
 import EthCrypto from "eth-crypto";
 import { uploadToIPFS } from "../../utils/ipfs";
 import { useAuthStore } from "../../store/useAuthStore";
@@ -21,7 +20,7 @@ import { useAuthStore } from "../../store/useAuthStore";
 import { useAnonAadhaar } from '@anon-aadhaar/react';
 
 const AUTHORITY_PUBLIC_KEY =
-  "04b66b26d525752df7563039643486a67f08e4274c5d468132e0882fa46c268846c4830113824f285d18d09798701e66c93433a088897089404284d72863920958";
+  "048318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed753547f11ca8696646f2f3acb08e31016afac23e630c5d11f59f61fef57b0d2aa5";
 
 interface SubmissionModalProps {
   isOpen: boolean;
@@ -86,8 +85,20 @@ export const SubmissionModal = ({ isOpen, onClose }: SubmissionModalProps) => {
         authorPublicKey: identity?.publicKey || "0x0", 
       };
 
+      // Helper to convert hex string to Uint8Array
+      const hexToUint8Array = (hexString: string) => {
+        if (hexString.length % 2 !== 0) {
+          throw new Error("Invalid hex string");
+        }
+        const arrayBuffer = new Uint8Array(hexString.length / 2);
+        for (let i = 0; i < hexString.length; i += 2) {
+          arrayBuffer[i / 2] = parseInt(hexString.substr(i, 2), 16);
+        }
+        return arrayBuffer;
+      };
+
       const encrypted = await EthCrypto.encryptWithPublicKey(
-        AUTHORITY_PUBLIC_KEY,
+        hexToUint8Array(AUTHORITY_PUBLIC_KEY) as any,
         JSON.stringify(payload)
       );
       const encryptedString = EthCrypto.cipher.stringify(encrypted);
@@ -111,29 +122,30 @@ export const SubmissionModal = ({ isOpen, onClose }: SubmissionModalProps) => {
       const pcd = JSON.parse(pcdWrapper.pcd); // The inner JSON string
       
       // Extract data needed for solidity
-      const { proof, claim } = pcd;
+      const { claim } = pcd;
+      let { proof } = pcd;
       
-      // Format Groth16 Proof for Solidity: [a0, a1, b00, b01, b10, b11, c0, c1]
+      // Handle nested proof structure
+      const proofData = proof.groth16Proof || proof;
+
+      // Format Groth16 Proof for Solidity
       const groth16Proof = [
-          proof.pi_a[0], proof.pi_a[1],
-          proof.pi_b[0][1], proof.pi_b[0][0],
-          proof.pi_b[1][1], proof.pi_b[1][0],
-          proof.pi_c[0], proof.pi_c[1]
+          proofData.pi_a[0], proofData.pi_a[1],
+          proofData.pi_b[0][1], proofData.pi_b[0][0],
+          proofData.pi_b[1][1], proofData.pi_b[1][0],
+          proofData.pi_c[0], proofData.pi_c[1]
       ];
 
       addLog("✅ Proof packaged for Blockchain");
 
       // 5. Submit to Relayer
       // NOTE: We must use the signal found in the proof. 
-      // If you want to bind the CID to the proof, the signal must be passed 
-      // during the Login/Proof Generation phase, not afterwards.
-      // Here we assume the proof validates the USER, and the RELAYER validates the DATA binding.
       const response = await api.submitReport({
         ...formData,
         proofData: {
-          nullifierSeed: claim.nullifierSeed,
-          nullifier: claim.nullifier,
-          signal: claim.signal, // Must match what was signed during proof generation
+          nullifierSeed: proof.nullifierSeed,
+          nullifier: proof.nullifier,
+          signal: claim.signal || claim.signalHash || "1",
           groth16Proof
         },
         ipfsCid,
@@ -141,6 +153,19 @@ export const SubmissionModal = ({ isOpen, onClose }: SubmissionModalProps) => {
       });
 
       if (response.success) {
+        // Save to local persistence for "My Reports"
+        const { addReport } = useReportStore.getState();
+        
+        addReport({
+          id: response.data?.reportId || `local_${Date.now()}`,
+          title: formData.title,
+          status: 'pending',
+          date: new Date().toISOString().split('T')[0],
+          cid: ipfsCid,
+          category: formData.category,
+          severity: formData.severity
+        });
+
         addActivity({
           type: "submission",
           message: `Encrypted report submitted via ZK Relay`,
@@ -303,14 +328,33 @@ export const SubmissionModal = ({ isOpen, onClose }: SubmissionModalProps) => {
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-6"
               >
-                <div className="p-8 border-2 border-dashed border-zinc-800 rounded-3xl flex flex-col items-center justify-center text-center space-y-4 hover:border-emerald-500/50 transition-colors cursor-pointer group">
+                <div 
+                  onClick={() => document.getElementById('evidence-upload')?.click()}
+                  className="p-8 border-2 border-dashed border-zinc-800 rounded-3xl flex flex-col items-center justify-center text-center space-y-4 hover:border-emerald-500/50 transition-colors cursor-pointer group"
+                >
+                  <input 
+                    id="evidence-upload"
+                    type="file" 
+                    className="hidden" 
+                    multiple
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        setFormData({ ...formData, attachments: e.target.files.length });
+                        // In a real app, you would store the File objects here for IPFS upload
+                        // For MVP, we just count them and assume they are packed with the payload
+                        addLog(`📄 Selected ${e.target.files.length} file(s)`);
+                      }
+                    }}
+                  />
                   <div className="h-16 w-16 rounded-2xl bg-zinc-950 flex items-center justify-center text-zinc-500 group-hover:text-emerald-500 transition-colors">
                     <Upload size={32} />
                   </div>
                   <div>
-                    <p className="text-zinc-100 font-medium">Upload Evidence</p>
+                    <p className="text-zinc-100 font-medium">
+                      {formData.attachments > 0 ? `${formData.attachments} file(s) selected` : "Upload Evidence"}
+                    </p>
                     <p className="text-zinc-500 text-sm">
-                      Drag and drop files or click to browse
+                      {formData.attachments > 0 ? "Click to change" : "Drag and drop files or click to browse"}
                     </p>
                   </div>
                   <p className="text-[10px] text-zinc-600 uppercase tracking-widest">

@@ -1,7 +1,7 @@
 import axios from "axios";
 
 // Ideally, these should be in a .env file (VITE_PINATA_JWT)
-const PINATA_JWT = import.meta.env.VITE_PINATA_JWT || "YOUR_PINATA_JWT_HERE";
+const PINATA_JWT = import.meta.env.VITE_PINATA_JWT;
 
 export const uploadToIPFS = async (data: any) => {
   try {

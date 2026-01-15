@@ -5,6 +5,7 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const { ethers } = require("ethers");
 const VeilABI = require("./abi/Veil.json");
+const db = require("./database"); // Import Database
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -29,17 +30,89 @@ const veilContract = new ethers.Contract(
 // 3. RATE LIMITER
 const submissionLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 5,
+  max: 20, // Increased for testing
   message: {
     success: false,
     error: "Too many requests from this IP. Try again later.",
   },
 });
 
-// 4. API ENDPOINT
+// 4. API ENDPOINTS
+
+// ORGANIZATION LOGIN
+app.post("/api/login-org", async (req, res) => {
+    const { orgId, accessKey } = req.body;
+    // Hardcoded for MVP
+    if (orgId === 'ADMIN-01' && accessKey === 'veil-2025') {
+        return res.json({
+            success: true,
+            data: { token: 'mock_jwt_admin_token', name: 'Global Oversight Agency' }
+        });
+    }
+    return res.status(401).json({ success: false, error: 'Invalid Credentials' });
+});
+
+// GET REPUTATION
+app.get("/api/reputation/:commitment", async (req, res) => {
+    try {
+        const { commitment } = req.params;
+        const stats = await db.getReputationStats(commitment);
+        
+        let score = 50; // Base Score
+        stats.forEach(row => {
+            if (row.status === 'verified') score += (row.count * 15);
+            if (row.status === 'flagged') score -= (row.count * 10);
+            if (row.status === 'spam') score -= (row.count * 30);
+        });
+
+        score = Math.max(0, Math.min(100, score)); // Clamp 0-100
+
+        let level = 'Novice';
+        if (score >= 90) level = 'Elite';
+        else if (score >= 70) level = 'Trusted';
+        else if (score < 30) level = 'Suspicious';
+
+        res.json({ success: true, data: { commitment, score, level } });
+    } catch (error) {
+        console.error("Reputation Error:", error);
+        res.status(500).json({ success: false, error: "Failed to calc reputation" });
+    }
+});
+
+// UPDATE STATUS
+app.post("/api/update-status", async (req, res) => {
+    try {
+        const { reportId, status } = req.body;
+        if (!['verified', 'flagged', 'spam', 'pending'].includes(status)) {
+            return res.status(400).json({ error: "Invalid status" });
+        }
+        await db.updateReportStatus(reportId, status);
+        res.json({ success: true, status });
+    } catch (error) {
+        res.status(500).json({ success: false, error: "Update failed" });
+    }
+});
+
+// GET REPORTS (Investigator Dashboard)
+app.get("/api/reports", async (req, res) => {
+    try {
+        const filters = {
+            status: req.query.status,
+            category: req.query.category
+        };
+        const reports = await db.getReports(filters);
+        res.json({ success: true, data: reports });
+    } catch (error) {
+        console.error("Fetch Error:", error);
+        res.status(500).json({ success: false, error: "Failed to fetch reports" });
+    }
+});
+
+// SUBMIT REPORT
 app.post("/api/submit-report", submissionLimiter, async (req, res) => {
   try {
-    const { proofData, ipfsCid } = req.body;
+    // metadata fields are now expected in the body for the database
+    const { proofData, ipfsCid, title, category, severity, description, status } = req.body;
 
     // Validation
     if (!proofData || !ipfsCid) {
@@ -74,7 +147,25 @@ app.post("/api/submit-report", submissionLimiter, async (req, res) => {
 
     console.log(`--> Transaction Confirmed`);
 
-    res.json({ success: true, txHash: tx.hash });
+    // 6. SAVE TO DATABASE
+    const reportId = `rep_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+    const reportData = {
+        id: reportId,
+        ipfsCid,
+        title: title || "Untitled Report",
+        category: category || "Uncategorized",
+        severity: severity || "medium",
+        description: description || "No description provided.",
+        status: status || "pending",
+        timestamp: Date.now(),
+        txHash: tx.hash,
+        userCommitment: nullifier ? nullifier.toString() : "0x0" // Approximate user identity
+    };
+    
+    await db.insertReport(reportData);
+    console.log(`--> Saved to SQLite DB: ${reportId}`);
+
+    res.json({ success: true, txHash: tx.hash, reportId });
   } catch (error) {
     console.error("Relay Error:", error);
     

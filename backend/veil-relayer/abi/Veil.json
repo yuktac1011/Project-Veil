@@ -265,32 +265,27 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_merkleTreeDepth",
+        "name": "nullifierSeed",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
-        "name": "_merkleTreeRoot",
+        "name": "nullifier",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
-        "name": "_nullifier",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_scope",
+        "name": "signal",
         "type": "uint256"
       },
       {
         "internalType": "uint256[8]",
-        "name": "_points",
+        "name": "groth16Proof",
         "type": "uint256[8]"
       },
       {
         "internalType": "string",
-        "name": "_ipfsCid",
+        "name": "ipfsCid",
         "type": "string"
       }
     ],
