@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Search, 
-  Filter, 
-  CheckCircle2, 
-  AlertOctagon, 
-  Trash2, 
-  Shield, 
-  Clock, 
-  FileText, 
+import {
+  Search,
+  Filter,
+  CheckCircle2,
+  AlertOctagon,
+  Trash2,
+  Shield,
+  Clock,
+  FileText,
   ExternalLink,
   ChevronRight,
   Loader2,
@@ -75,9 +75,9 @@ export const AdminReports = ({ folder }: AdminReportsProps) => {
         <div className="mb-6 flex items-center justify-between gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
-            <input 
-              type="text" 
-              placeholder={`Search ${folder}...`} 
+            <input
+              type="text"
+              placeholder={`Search ${folder}...`}
               className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl py-2 pl-10 pr-4 text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
             />
           </div>
@@ -99,8 +99,8 @@ export const AdminReports = ({ folder }: AdminReportsProps) => {
                 onClick={() => setSelectedReport(report)}
                 className={clsx(
                   "p-4 rounded-2xl border transition-all cursor-pointer group",
-                  selectedReport?.id === report.id 
-                    ? "bg-emerald-500/5 border-emerald-500/30" 
+                  selectedReport?.id === report.id
+                    ? "bg-emerald-500/5 border-emerald-500/30"
                     : "bg-zinc-900/40 border-zinc-800/50 hover:border-zinc-700"
                 )}
               >
@@ -109,8 +109,8 @@ export const AdminReports = ({ folder }: AdminReportsProps) => {
                     <span className={clsx(
                       "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full",
                       report.severity === 'critical' ? 'bg-red-500/10 text-red-500' :
-                      report.severity === 'high' ? 'bg-orange-500/10 text-orange-500' :
-                      'bg-blue-500/10 text-blue-500'
+                        report.severity === 'high' ? 'bg-orange-500/10 text-orange-500' :
+                          'bg-blue-500/10 text-blue-500'
                     )}>
                       {report.severity}
                     </span>
@@ -175,7 +175,7 @@ export const AdminReports = ({ folder }: AdminReportsProps) => {
                     </div>
                     <div>
                       <p className="text-sm font-bold text-zinc-200">{userRep?.level || 'Loading...'}</p>
-                      <p className="text-[10px] text-zinc-500 font-mono">{selectedReport.userCommitment.slice(0, 12)}...</p>
+                      <p className="text-[10px] text-zinc-500 font-mono">{(selectedReport.userCommitment || '').slice(0, 12)}...</p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -202,7 +202,7 @@ export const AdminReports = ({ folder }: AdminReportsProps) => {
                 <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] text-zinc-500">ZK-Proof Hash</span>
-                    <code className="text-[10px] text-emerald-500 font-mono">{selectedReport.zkProof.slice(0, 20)}...</code>
+                    <code className="text-[10px] text-emerald-500 font-mono">{(selectedReport.zkProof || '').slice(0, 20)}...</code>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] text-zinc-500">Verification Status</span>
@@ -224,7 +224,7 @@ export const AdminReports = ({ folder }: AdminReportsProps) => {
                 </div>
               ) : (
                 <div className="grid grid-cols-3 gap-3">
-                  <button 
+                  <button
                     onClick={() => handleStatusUpdate('verified')}
                     className="flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-emerald-500/10 text-zinc-500 hover:text-emerald-500 transition-all group"
                   >
@@ -232,7 +232,7 @@ export const AdminReports = ({ folder }: AdminReportsProps) => {
                     <span className="text-[10px] font-bold uppercase">Verify</span>
                     <span className="text-[8px] text-emerald-500/0 group-hover:text-emerald-500/60 transition-all">+15 Credit</span>
                   </button>
-                  <button 
+                  <button
                     onClick={() => handleStatusUpdate('flagged')}
                     className="flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-amber-500/10 text-zinc-500 hover:text-amber-500 transition-all group"
                   >
@@ -240,7 +240,7 @@ export const AdminReports = ({ folder }: AdminReportsProps) => {
                     <span className="text-[10px] font-bold uppercase">Flag</span>
                     <span className="text-[8px] text-amber-500/0 group-hover:text-amber-500/60 transition-all">-10 Credit</span>
                   </button>
-                  <button 
+                  <button
                     onClick={() => handleStatusUpdate('spam')}
                     className="flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-red-500/10 text-zinc-500 hover:text-red-500 transition-all group"
                   >
