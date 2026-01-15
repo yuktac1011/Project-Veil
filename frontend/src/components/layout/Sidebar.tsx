@@ -1,12 +1,14 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Shield, 
-  Settings, 
-  FileText, 
+import {
+  LayoutDashboard,
+  Shield,
+  Settings,
+  FileText,
   LogOut,
-  Zap
+  Zap,
+  Activity,
+  Users
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -15,6 +17,8 @@ import { useNavigate } from 'react-router-dom';
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'My Reports', href: '/reports', icon: FileText },
+  { name: 'Governance', href: '/community', icon: Users },
+  { name: 'Network', href: '/network', icon: Activity },
   { name: 'Security', href: '/settings', icon: Shield },
 ];
 
@@ -25,10 +29,10 @@ export const Sidebar = () => {
   const handleLogout = () => {
     // Clear local auth state
     logout();
-    
+
     // Clear Anon Aadhaar storage if any (it typically uses local storage)
     localStorage.removeItem("anon-aadhaar-storage");
-    
+
     // Redirect to auth page
     navigate('/auth');
   };
@@ -48,8 +52,8 @@ export const Sidebar = () => {
             to={item.href}
             className={({ isActive }) => clsx(
               "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200",
-              isActive 
-                ? "bg-emerald-500/10 text-emerald-500" 
+              isActive
+                ? "bg-emerald-500/10 text-emerald-500"
                 : "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900"
             )}
           >
@@ -69,7 +73,7 @@ export const Sidebar = () => {
             Your identity is protected by end-to-end zero-knowledge proofs.
           </p>
         </div>
-        
+
         <NavLink
           to="/settings"
           className="flex items-center gap-3 px-3 py-2 mt-4 rounded-xl text-sm font-medium text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 transition-all"

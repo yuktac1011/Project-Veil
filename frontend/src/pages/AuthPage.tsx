@@ -60,20 +60,20 @@ export const AuthPage = () => {
       };
 
       if (pcdWrapper) {
-          try {
-             // @ts-ignore
-             const pcd = JSON.parse(pcdWrapper.pcd);
-             const proof = pcd.proof || {};
-             const nullifier = proof.nullifier || pcd.claim?.nullifier;
-             
-             if (nullifier) {
-                 // Use the nullifier as the public interface identity
-                 realIdentity.publicKey = "0x" + BigInt(nullifier).toString(16);
-                 realIdentity.nullifier = nullifier;
-             }
-          } catch (e) {
-              console.error("Failed to parse PCD for identity", e);
+        try {
+          // @ts-ignore
+          const pcd = JSON.parse(pcdWrapper.pcd);
+          const proof = pcd.proof || {};
+          const nullifier = proof.nullifier || pcd.claim?.nullifier;
+
+          if (nullifier) {
+            // Use the nullifier as the public interface identity
+            realIdentity.publicKey = "0x" + BigInt(nullifier).toString(16);
+            realIdentity.nullifier = nullifier;
           }
+        } catch (e) {
+          console.error("Failed to parse PCD for identity", e);
+        }
       }
 
       // Auto-create identity in your store
