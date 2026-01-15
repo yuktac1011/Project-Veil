@@ -18,6 +18,10 @@ interface AuthState {
   hasVault: boolean;
   vaultData: string | null;
   
+  // New: Session Data for Submission Flow
+  walletAddress: string | null;
+  zkProof: any | null; /* Persist Anon Aadhaar Proof */
+  
   // Actions
   setVault: (encryptedData: string) => void;
   unlock: (passcode: string) => Promise<void>;
@@ -25,6 +29,10 @@ interface AuthState {
   createIdentity: (identity: VeilIdentity, passcode: string) => Promise<void>;
   loginOrg: (org: OrgIdentity) => void;
   logout: () => void;
+  
+  // New Actions
+  setWallet: (address: string | null) => void;
+  setZkProof: (proof: any | null) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -36,6 +44,9 @@ export const useAuthStore = create<AuthState>()(
       isLocked: true,
       hasVault: !!localStorage.getItem('veil_vault'),
       vaultData: localStorage.getItem('veil_vault'),
+      
+      walletAddress: null,
+      zkProof: null,
 
       setVault: (encryptedData: string) => {
         localStorage.setItem('veil_vault', encryptedData);
@@ -51,7 +62,14 @@ export const useAuthStore = create<AuthState>()(
         set({ identity, userRole: 'user', isLocked: false });
       },
 
-      lock: () => set({ identity: null, orgIdentity: null, userRole: null, isLocked: true }),
+      lock: () => set({ 
+          identity: null, 
+          orgIdentity: null, 
+          userRole: null, 
+          isLocked: true,
+          walletAddress: null,
+          zkProof: null
+      }),
 
       createIdentity: async (identity: VeilIdentity, passcode: string) => {
         const encrypted = await encryptVault(JSON.stringify(identity), passcode);
@@ -71,14 +89,33 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         localStorage.removeItem('veil_vault');
-        set({ identity: null, orgIdentity: null, userRole: null, vaultData: null, hasVault: false, isLocked: true });
-      }
+        set({ 
+            identity: null, 
+            orgIdentity: null, 
+            userRole: null, 
+            vaultData: null, 
+            hasVault: false, 
+            isLocked: true,
+            walletAddress: null,
+            zkProof: null
+        });
+      },
+      
+      setWallet: (address) => set({ walletAddress: address }),
+      setZkProof: (proof) => set({ zkProof: proof })
     }),
     {
       name: 'veil-auth-storage',
       partialize: (state) => ({ 
         orgIdentity: state.orgIdentity,
-        userRole: state.userRole
+        userRole: state.userRole,
+        // We probably WANT to persist wallet/proof for session refresh?
+        // Or keep them memory only for better security?
+        // For "Auth Page Setup" flow requests, persisting them 
+        // implies user doesn't want to re-do it on refresh.
+        // Let's persist them for now.
+        walletAddress: state.walletAddress,
+        zkProof: state.zkProof
       }),
     }
   )

@@ -109,10 +109,11 @@ const getReputationStats = (commitment) => {
   });
 }
 
-const getReport = (id) => {
+const getReport = (idOrCid) => {
   return new Promise((resolve, reject) => {
-    const sql = `SELECT * FROM reports WHERE id = ?`;
-    db.get(sql, [id], (err, row) => {
+    // Allow lookup by ID or CID (Frontend might store CID as ID)
+    const sql = `SELECT * FROM reports WHERE id = ? OR ipfsCid = ?`;
+    db.get(sql, [idOrCid, idOrCid], (err, row) => {
       if (err) {
         reject(err);
       } else {

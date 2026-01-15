@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Plus, 
-  Shield, 
-  Activity, 
-  Lock, 
+import {
+  Plus,
+  Shield,
+  Activity,
+  Lock,
   ChevronRight,
   FileText,
   CheckCircle2,
@@ -14,17 +14,45 @@ import {
   Globe,
   ShieldCheck
 } from 'lucide-react';
+import { api } from '../api/api';
 import { useAuthStore } from '../store/useAuthStore';
 import { useReportStore } from '../store/useReportStore';
-import { SubmissionModal } from '../components/reports/SubmissionModal';
 import { Button } from '../components/ui/Button';
 import { clsx } from 'clsx';
 
 export const Dashboard = () => {
   const navigate = useNavigate();
   const { identity } = useAuthStore();
-  const { reports, activities, anonymityScore } = useReportStore();
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { reports, activities, anonymityScore, updateReportStatus } = useReportStore();
+
+  // Poll for status updates for pending reports
+  useEffect(() => {
+    const checkPendingReports = async () => {
+      const pendingReports = reports.filter(r => r.status === 'pending');
+      if (pendingReports.length === 0) return;
+
+      for (const report of pendingReports) {
+        // We use report.cid as the lookup ID because we enhanced the backend to support it
+        // Or report.id if it's set correctly. Local store used cid as ID in previous step.
+        const lookupId = report.id || report.cid;
+        try {
+          const result = await api.getReportStatus(lookupId);
+          if (result.success && result.data && result.data.status !== report.status) {
+            // Status changed! Update local store
+            console.log(`Status update for ${lookupId}: ${report.status} -> ${result.data.status}`);
+            updateReportStatus(report.id, result.data.status as any); // Type cast for 'flagged'/'spam' safety
+          }
+        } catch (e) {
+          console.error("Failed to poll status", e);
+        }
+      }
+    };
+
+    // Check immediately then interval
+    checkPendingReports();
+    const interval = setInterval(checkPendingReports, 5000); // 5 seconds
+    return () => clearInterval(interval);
+  }, [reports, updateReportStatus]);
 
   const recentReports = reports.slice(0, 3);
 
@@ -44,7 +72,7 @@ export const Dashboard = () => {
   };
 
   return (
-    <motion.div 
+    <motion.div
       variants={containerVariants}
       initial="hidden"
       animate="visible"
@@ -56,29 +84,31 @@ export const Dashboard = () => {
           <h1 className="text-4xl font-bold tracking-tight text-zinc-100">Command Center</h1>
           <p className="text-zinc-500 flex items-center gap-2">
             <ShieldCheck size={16} className="text-emerald-500" />
-            Identity Secured: <span className="font-mono text-zinc-400">{identity?.publicKey.slice(0, 12)}...</span>
+            Identity Secured: <span className="font-mono text-zinc-400">Anonymous</span>
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={() => navigate('/reports')}
             className="hidden sm:flex"
           >
             History
           </Button>
-          <Button 
-            onClick={() => setIsModalOpen(true)} 
+          <Button
+            onClick={() => navigate('/submit-report')}
             className="shadow-lg shadow-emerald-500/20 py-6 px-8 text-lg"
           >
-            <Plus className="mr-2" size={20} /> New Submission
+            <div className="flex items-center">
+              <Plus className="mr-2" size={20} /> New Submission
+            </div>
           </Button>
         </div>
       </div>
 
       {/* Bento Grid Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <motion.div 
+        <motion.div
           variants={itemVariants}
           className="bg-zinc-900/50 border border-zinc-800 rounded-[2rem] p-8 relative overflow-hidden group"
         >
@@ -96,7 +126,7 @@ export const Dashboard = () => {
               </div>
             </div>
             <div className="mt-6 h-2 bg-zinc-800 rounded-full overflow-hidden">
-              <motion.div 
+              <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${anonymityScore}%` }}
                 transition={{ duration: 1, ease: "easeOut" }}
@@ -106,7 +136,7 @@ export const Dashboard = () => {
           </div>
         </motion.div>
 
-        <motion.div 
+        <motion.div
           variants={itemVariants}
           className="bg-zinc-900/50 border border-zinc-800 rounded-[2rem] p-8"
         >
@@ -127,7 +157,7 @@ export const Dashboard = () => {
           </div>
         </motion.div>
 
-        <motion.div 
+        <motion.div
           variants={itemVariants}
           className="bg-zinc-900/50 border border-zinc-800 rounded-[2rem] p-8 flex flex-col justify-between"
         >
@@ -162,18 +192,18 @@ export const Dashboard = () => {
               <FileText size={24} className="text-emerald-500" />
               Recent Submissions
             </h2>
-            <button 
+            <button
               onClick={() => navigate('/reports')}
               className="text-sm font-bold text-zinc-500 hover:text-emerald-500 transition-colors flex items-center gap-1 group"
             >
               View All <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
             </button>
           </div>
-          
+
           <div className="space-y-4">
             {recentReports.length > 0 ? (
               recentReports.map((report) => (
-                <div 
+                <div
                   key={report.id}
                   onClick={() => navigate('/reports')}
                   className="bg-zinc-900/30 border border-zinc-800/50 rounded-[1.5rem] p-6 hover:border-emerald-500/30 transition-all cursor-pointer group relative overflow-hidden"
@@ -195,9 +225,9 @@ export const Dashboard = () => {
                     </div>
                     <div className={clsx(
                       "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
-                      report.status === 'verified' ? 'bg-emerald-500/10 text-emerald-500' : 
-                      report.status === 'pending' ? 'bg-amber-500/10 text-amber-500' :
-                      'bg-red-500/10 text-red-500'
+                      report.status === 'verified' ? 'bg-emerald-500/10 text-emerald-500' :
+                        report.status === 'pending' ? 'bg-amber-500/10 text-amber-500' :
+                          'bg-red-500/10 text-red-500'
                     )}>
                       {report.status}
                     </div>
@@ -213,7 +243,7 @@ export const Dashboard = () => {
                   <p className="text-zinc-100 font-bold">No submissions yet</p>
                   <p className="text-zinc-500 text-sm">Your anonymous reports will appear here.</p>
                 </div>
-                <Button variant="ghost" onClick={() => setIsModalOpen(true)}>
+                <Button variant="ghost" onClick={() => navigate('/submit-report')}>
                   Start First Report
                 </Button>
               </div>
@@ -229,12 +259,12 @@ export const Dashboard = () => {
               Security Log
             </h2>
           </div>
-          
+
           <div className="bg-zinc-900/30 border border-zinc-800 rounded-[2rem] p-8 space-y-8 relative overflow-hidden">
             <div className="absolute top-0 right-0 p-8 opacity-[0.02] pointer-events-none">
               <Activity size={200} />
             </div>
-            
+
             {activities.map((activity, idx) => (
               <div key={activity.id} className="flex gap-6 relative group">
                 {idx !== activities.length - 1 && (
@@ -244,9 +274,9 @@ export const Dashboard = () => {
                   "h-8 w-8 rounded-xl flex items-center justify-center shrink-0 z-10 transition-all",
                   activity.status === 'success' ? 'bg-emerald-500/10 text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-zinc-800 text-zinc-500'
                 )}>
-                  {activity.type === 'zk_proof' ? <Shield size={16} /> : 
-                   activity.type === 'submission' ? <CheckCircle2 size={16} /> :
-                   <Activity size={16} />}
+                  {activity.type === 'zk_proof' ? <Shield size={16} /> :
+                    activity.type === 'submission' ? <CheckCircle2 size={16} /> :
+                      <Activity size={16} />}
                 </div>
                 <div className="space-y-1.5">
                   <p className="text-sm font-bold text-zinc-200 group-hover:text-emerald-500 transition-colors">
@@ -269,7 +299,6 @@ export const Dashboard = () => {
         </motion.div>
       </div>
 
-      <SubmissionModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </motion.div>
   );
 };

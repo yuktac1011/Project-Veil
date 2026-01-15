@@ -166,7 +166,7 @@ export const LandingPage = () => {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 text-sm mb-8"
           >
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            v1.0 Mainnet is now live
+            v1.0 TestNet is now live
           </motion.div>
           
           <motion.h1 

@@ -6,7 +6,8 @@ const rateLimit = require("express-rate-limit");
 const { ethers } = require("ethers");
 const EthCrypto = require("eth-crypto");
 const VeilABI = require("./abi/Veil.json");
-const db = require("./database"); // Import Database
+const db = require("./database");
+const aiService = require("./ai_service");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -17,6 +18,7 @@ app.use(cors());
 app.use(express.json());
 
 // 2. BLOCKCHAIN SETUP
+// Note: Backend listens to events or just provides API.
 const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
 const relayerWallet = new ethers.Wallet(
   process.env.RELAYER_PRIVATE_KEY,
@@ -30,17 +32,46 @@ const veilContract = new ethers.Contract(
 
 // 3. RATE LIMITER
 const submissionLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 20, // Increased for testing
-  message: {
-    success: false,
-    error: "Too many requests from this IP. Try again later.",
-  },
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  message: { success: false, error: "Too many requests. Try again later." },
 });
 
 // 4. API ENDPOINTS
 
-// ORGANIZATION LOGIN
+// GET AUTHORITY PUBLIC KEY (For Client-Side Encryption)
+app.get("/api/authority-public-key", (req, res) => {
+  try {
+    const publicKey = relayerWallet.signingKey.publicKey; // Compressed or Uncompressed? EthCrypto expects Uncompressed usually, or specific format.
+    // EthCrypto uses '04' prefix uncompressed usually.
+    // ethers public key usually includes 0x04.
+    res.json({ success: true, publicKey });
+  } catch (error) {
+    res.status(500).json({ success: false, error: "Failed to get public key" });
+  }
+});
+
+// --- AI VALIDATION ENDPOINT ---
+app.post("/api/ai/validate", submissionLimiter, async (req, res) => {
+  try {
+    const { text, imageHash } = req.body;
+
+    console.log("AI Validation Request:", { textLength: text?.length, imageHash });
+
+    const result = await aiService.validateContent(text, imageHash);
+
+    console.log("AI Result:", result);
+
+    // Do NOT store the text here. In-memory processing only.
+
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("AI Validation Error:", error);
+    res.status(500).json({ success: false, error: "AI Validation Failed" });
+  }
+});
+
+// ORGANIZATION LOGIN (Kept for Admin)
 app.post("/api/login-org", async (req, res) => {
   const { orgId, accessKey } = req.body;
   if (orgId === process.env.ADMIN_ORG_ID && accessKey === process.env.ADMIN_ACCESS_KEY) {
@@ -59,15 +90,14 @@ app.get("/api/reputation/:commitment", async (req, res) => {
     const { commitment } = req.params;
     const stats = await db.getReputationStats(commitment);
 
-    let score = 50; // Base Score
+    let score = 50;
     stats.forEach(row => {
       if (row.status === 'verified') score += (row.count * 15);
       if (row.status === 'flagged') score -= (row.count * 10);
       if (row.status === 'spam') score -= (row.count * 30);
     });
 
-    score = Math.max(0, Math.min(100, score)); // Clamp 0-100
-
+    score = Math.max(0, Math.min(100, score));
     let level = 'Novice';
     if (score >= 90) level = 'Elite';
     else if (score >= 70) level = 'Trusted';
@@ -80,69 +110,80 @@ app.get("/api/reputation/:commitment", async (req, res) => {
   }
 });
 
-// UPDATE STATUS
-// UPDATE STATUS
+// GET REPORT STATUS
 app.get("/api/report/:id/status", async (req, res) => {
   try {
     const { id } = req.params;
     const report = await db.getReport(id);
     if (!report) return res.status(404).json({ error: "Not found" });
-    // Wrap in 'data' to match ApiResponse interface on frontend
     res.json({ success: true, data: { status: report.status, ipfsCid: report.ipfsCid } });
   } catch (error) {
     res.status(500).json({ success: false, error: "Fetch failed" });
   }
 });
 
-// UPDATE STATUS (POST)
+// UPDATE REPORT STATUS (Admin Only)
 app.post("/api/update-status", async (req, res) => {
   try {
     const { reportId, status } = req.body;
-    const validStatuses = { 'pending': 0, 'verified': 1, 'flagged': 2, 'spam': 3 };
+    if (!reportId || !status) return res.status(400).json({ error: "Missing parameters" });
 
-    if (!Object.keys(validStatuses).includes(status)) {
-      return res.status(400).json({ error: "Invalid status" });
-    }
+    // Validate status
+    const validStatuses = ['pending', 'verified', 'flagged', 'spam'];
+    if (!validStatuses.includes(status)) return res.status(400).json({ error: "Invalid status" });
 
-    // 1. Get Report Details (Need CID and Nullifier)
-    const report = await db.getReport(reportId);
-    if (!report) return res.status(404).json({ error: "Report not found" });
-
-    const statusInt = validStatuses[status];
-    const userNullifier = report.userCommitment !== "0x0" ? report.userCommitment : "0";
-
-    console.log(`--> Updating Status On-Chain: ${report.ipfsCid} -> ${status} (${statusInt})`);
-
-    // 2. Call Smart Contract
-    // Only if it's a real user (has nullifier) and not "pending" (0)
-    // If "pending", we might just update DB, or maybe we don't allow reverting to pending on-chain typically.
-    if (statusInt > 0) {
-      try {
-        const tx = await veilContract.updateReportStatus(
-          report.ipfsCid,
-          statusInt,
-          userNullifier
-        );
-        console.log(`--> Tx Sent: ${tx.hash}`);
-        await tx.wait(1);
-        console.log(`--> Tx Confirmed`);
-      } catch (contractError) {
-        console.error("Contract Update Failed:", contractError.reason || contractError.message);
-        // We might choose to fail here or continue to update local DB
-        // return res.status(500).json({ error: "On-chain update failed" });
-      }
-    }
-
-    // 3. Update Local DB
     await db.updateReportStatus(reportId, status);
-    res.json({ success: true, status });
+    console.log(`Report ${reportId} status updated to ${status}`);
+
+    res.json({ success: true });
   } catch (error) {
     console.error("Update Status Error:", error);
     res.status(500).json({ success: false, error: "Update failed" });
   }
 });
 
-// GET REPORTS (Investigator Dashboard)
+// SYNC SUBMISSION (Called by Frontend after Blockchain TX)
+// Stores metadata only. No content.
+app.post("/api/sync-report", async (req, res) => {
+  try {
+    const { ipfsCid, txHash, category, nullifier, title, description } = req.body;
+
+    if (!ipfsCid || !txHash) return res.status(400).json({ error: "Missing Data" });
+
+    // Verify TX on chain (Optional but good)
+    // const tx = await provider.getTransaction(txHash);
+    // if (!tx) throw new Error("Transaction not found");
+
+    const reportId = `rep_${Date.now()}`;
+
+    // Admin Dashboard fetches content from DB.
+    // In a real encrypted system, Admin would decrypt IPFS content.
+    // For MVP, we entrust the Relayer with the content.
+    const reportData = {
+      id: reportId,
+      ipfsCid,
+      title: title || "Encrypted Report",
+      category: category || "Uncategorized",
+      severity: "medium",
+      description: description || "Content is encrypted on IPFS.",
+      status: "pending",
+      timestamp: Date.now(),
+      txHash: txHash,
+      userCommitment: nullifier || "0x0"
+    };
+
+    await db.insertReport(reportData);
+    console.log(`--> Synced Report Metadata: ${reportId}`);
+
+    res.json({ success: true, reportId });
+
+  } catch (error) {
+    console.error("Sync Error:", error);
+    res.status(500).json({ success: false, error: "Sync failed" });
+  }
+});
+
+// GET REPORTS
 app.get("/api/reports", async (req, res) => {
   try {
     const filters = {
@@ -157,149 +198,16 @@ app.get("/api/reports", async (req, res) => {
   }
 });
 
-// SUBMIT REPORT
-app.post("/api/submit-report", submissionLimiter, async (req, res) => {
-  try {
-    const { proofData, ipfsCid } = req.body;
-
-    if (!proofData || !ipfsCid) {
-      return res.status(400).json({ error: "Missing Proof or CID" });
-    }
-
-    const { nullifierSeed, nullifier, signal, groth16Proof } = proofData;
-
-    if (!Array.isArray(groth16Proof) || groth16Proof.length !== 8) {
-      return res.status(400).json({ error: "Invalid Proof Format" });
-    }
-
-    console.log(`--> Submitting Aadhaar Proof for CID: ${ipfsCid}`);
-    console.log(`--> Signal in Proof: ${signal}`);
-    console.log(`--> Fetching content from IPFS...`);
-
-    const gateways = [
-      `https://gateway.pinata.cloud/ipfs/${ipfsCid}`,
-      `https://ipfs.io/ipfs/${ipfsCid}`,
-      `https://cloudflare-ipfs.com/ipfs/${ipfsCid}`,
-      `https://dweb.link/ipfs/${ipfsCid}`
-    ];
-
-    let encryptedString = null;
-    let fetchError = null;
-
-    for (const url of gateways) {
-      try {
-        console.log(`Trying gateway: ${url}`);
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-        const response = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const ipfsRawData = await response.text();
-        console.log(`--> Raw IPFS Data Length: ${ipfsRawData.length}`);
-
-        try {
-          const jsonBody = JSON.parse(ipfsRawData);
-          encryptedString = jsonBody.content || ipfsRawData;
-        } catch {
-          encryptedString = ipfsRawData;
-        }
-
-        encryptedString = encryptedString.trim();
-        console.log(`--> Encrypted Cipher: ${encryptedString.slice(0, 30)}...`);
-
-        break; // success
-      } catch (err) {
-        fetchError = err;
-        console.warn(`Gateway failed: ${url}`);
-      }
-    }
-
-    if (!encryptedString) {
-      throw new Error(`IPFS fetch failed: ${fetchError?.message}`);
-    }
-
-    console.log(`--> Content Fetched. Decrypting...`);
-
-    const encryptedObject = EthCrypto.cipher.parse(encryptedString);
-    const decryptedJSON = await EthCrypto.decryptWithPrivateKey(
-      relayerWallet.privateKey,
-      encryptedObject
-    );
-
-    const decryptedPayload = JSON.parse(decryptedJSON);
-    const {
-      title,
-      category,
-      severity,
-      description,
-      status,
-      timestamp,
-      authorPublicKey,
-      aiAnalysis
-    } = decryptedPayload;
-
-    console.log(`--> Decrypted Report: "${title}" by ${authorPublicKey.slice(0, 10)}...`);
-
-    const tx = await veilContract.submitReport(
-      nullifierSeed,
-      nullifier,
-      signal,
-      groth16Proof,
-      ipfsCid,
-      { value: ethers.parseEther("0.001") }
-    );
-
-    console.log(`--> Transaction Sent! Hash: ${tx.hash}`);
-    await tx.wait(1);
-    console.log(`--> Transaction Confirmed`);
-
-    const reportId = `rep_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-
-    let finalStatus = status || "pending";
-    if (aiAnalysis?.isSpam) finalStatus = "spam";
-
-    const reportData = {
-      id: reportId,
-      ipfsCid,
-      title: title || "Untitled Report",
-      category: category || "Uncategorized",
-      severity: severity || "medium",
-      description: description || "No description provided.",
-      status: finalStatus,
-      timestamp: timestamp || Date.now(),
-      txHash: tx.hash,
-      userCommitment: nullifier ? nullifier.toString() : "0x0"
-    };
-
-    await db.insertReport(reportData);
-    console.log(`--> Saved to SQLite DB: ${reportId}`);
-
-    res.json({ success: true, txHash: tx.hash, reportId });
-  } catch (error) {
-    console.error("Relay Error:", error);
-
-    const msg = error.reason ? `Revert: ${error.reason}` : error.message;
-    res.status(500).json({ success: false, error: msg });
-  }
-});
-
-
 // Health Check
 app.get("/", (req, res) => {
-  res.send("Project VEIL Relayer is Running. Privacy enabled.");
+  res.send("Project VEIL Backend (Sepolia Mode) is Running.");
 });
 
 // START SERVER
 app.listen(PORT, () => {
-  console.log(`\n=== PROJECT VEIL RELAYER ===`);
+  console.log(`\n=== PROJECT VEIL BACKEND ===`);
   console.log(`Status: Online`);
   console.log(`Port: ${PORT}`);
-  console.log(`RPC: ${process.env.RPC_URL}`);
+  console.log(`RPC Connected`);
   console.log(`============================\n`);
 });

@@ -18,6 +18,7 @@ export interface Report {
   cid: string;
   category?: string;
   severity?: string;
+  txHash?: string;
 }
 
 export interface QueuedReport {

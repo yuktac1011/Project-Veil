@@ -82,7 +82,9 @@ export const AdminReports = ({ folder }: AdminReportsProps) => {
             />
           </div>
           <Button variant="outline" size="sm">
-            <Filter size={16} className="mr-2" /> Filter
+            <div className="flex items-center gap-2">
+              <Filter size={16} /> <p>Filter</p>
+            </div>
           </Button>
         </div>
 
@@ -106,14 +108,6 @@ export const AdminReports = ({ folder }: AdminReportsProps) => {
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <span className={clsx(
-                      "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full",
-                      report.severity === 'critical' ? 'bg-red-500/10 text-red-500' :
-                        report.severity === 'high' ? 'bg-orange-500/10 text-orange-500' :
-                          'bg-blue-500/10 text-blue-500'
-                    )}>
-                      {report.severity}
-                    </span>
                     <span className="text-[10px] text-zinc-500 flex items-center gap-1">
                       <Clock size={10} /> {new Date(report.timestamp).toLocaleDateString()}
                     </span>
@@ -194,6 +188,15 @@ export const AdminReports = ({ folder }: AdminReportsProps) => {
                   <p className="text-sm text-zinc-300 leading-relaxed">
                     {selectedReport.description}
                   </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open(`https://gateway.pinata.cloud/ipfs/${selectedReport.ipfsCid}`, '_blank')}
+                    className="w-full mt-4 text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      <ExternalLink size={12}/> <p>View Evidence Files</p>
+                    </div>
+                  </Button>
                 </div>
               </section>
 
@@ -208,8 +211,14 @@ export const AdminReports = ({ folder }: AdminReportsProps) => {
                     <span className="text-[10px] text-zinc-500">Verification Status</span>
                     <span className="text-[10px] font-bold text-emerald-500 uppercase">Valid Signature</span>
                   </div>
-                  <Button variant="outline" className="w-full py-2 text-[10px] h-auto">
-                    <ExternalLink size={12} className="mr-2" /> Verify on Explorer
+                  <Button
+                    variant="outline"
+                    className="w-full py-2 text-[10px] h-auto"
+                    onClick={() => window.open(`https://sepolia.etherscan.io/tx/${selectedReport.txHash}`, '_blank')}
+                  >
+                    <div className="flex items-center gap-2">
+                      <ExternalLink size={12}/> <p>Verify on Explorer</p>
+                    </div>
                   </Button>
                 </div>
               </section>

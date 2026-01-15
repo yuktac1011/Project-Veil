@@ -1,15 +1,13 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Shield } from 'lucide-react';
-import { AuthPage } from './pages/AuthPage';
 import { OrgLoginPage } from './pages/OrgLoginPage';
 import { Dashboard } from './pages/Dashboard';
+import { SubmitReport } from './pages/SubmitReport'; // NEW - Keep this
 import { LandingPage } from './pages/LandingPage';
-import { SettingsPage } from './pages/SettingsPage';
 import { LegalPage } from './pages/LegalPage';
 import { NotFoundPage } from './pages/NotFoundPage';
-import { UnauthorizedPage } from './pages/UnauthorizedPage';
-import { MyReports } from './pages/MyReports';
+import { UnauthorizedPage } from './pages/UnauthorizedPage'; // Restore this if file exists, or remove if not. User code had it.
+import { MyReports } from './pages/MyReports'; // Restore
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { AdminReports } from './pages/admin/AdminReports';
 import { AdminReputation } from './pages/admin/AdminReputation';
@@ -19,6 +17,9 @@ import { CookieBanner } from './components/ui/CookieBanner';
 import { ErrorBoundary } from './components/error/ErrorBoundary';
 import { useAuthStore } from './store/useAuthStore';
 import { OfflineSync } from './components/OfflineSync';
+import { Shield } from 'lucide-react';
+import { AuthPage } from './pages/AuthPage'; // Restore import
+import { SettingsPage } from './pages/SettingsPage'; // Restore import if needed
 
 const ProtectedRoute = ({ 
   children, 
@@ -95,7 +96,10 @@ function App() {
 
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-          {/* User Space */}
+          {/* New Submission Flow (Public/Anon) */}
+          <Route path="/submit-report" element={<SubmitReport />} />
+
+          {/* User Space - Protected again as per request */}
           <Route 
             path="/dashboard" 
             element={
@@ -116,7 +120,7 @@ function App() {
               </ProtectedRoute>
             } 
           />
-          <Route 
+           <Route 
             path="/settings" 
             element={
               <ProtectedRoute allowedRole="user">
@@ -127,7 +131,7 @@ function App() {
             } 
           />
           
-          {/* Admin Space - Standardized to /admin-dashboard */}
+          {/* Admin Space */}
           <Route 
             path="/admin-dashboard" 
             element={

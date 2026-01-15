@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Search, 
-  Filter, 
-  FileText, 
-  Clock, 
-  Shield, 
-  ChevronRight, 
+import {
+  Search,
+  Filter,
+  FileText,
+  Clock,
+  Shield,
+  ChevronRight,
   ExternalLink,
   Lock,
   AlertCircle,
@@ -32,8 +32,8 @@ export const MyReports = () => {
 
   const filteredReports = useMemo(() => {
     return reports.filter(report => {
-      const matchesSearch = report.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                           report.cid.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = report.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        report.cid.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesFilter = filterStatus === 'all' || report.status === filterStatus;
       return matchesSearch && matchesFilter;
     });
@@ -52,24 +52,24 @@ export const MyReports = () => {
     const checkStatuses = async () => {
       const pendingReports = reports.filter(r => r.status === 'pending');
       console.log(`[MyReports] Polling statuses for ${pendingReports.length} reports`);
-      
+
       for (const report of pendingReports) {
         try {
           const res = await api.getReportStatus(report.id);
           const newStatus = res.data?.status;
-          
+
           console.log(`[MyReports] Status for ${report.id}:`, newStatus);
-          
+
           if (res.success && newStatus && newStatus !== report.status) {
-             console.log(`[MyReports] Updating ${report.id} to ${newStatus}`);
-             useReportStore.getState().updateReportStatus(report.id, newStatus as any);
+            console.log(`[MyReports] Updating ${report.id} to ${newStatus}`);
+            useReportStore.getState().updateReportStatus(report.id, newStatus as any);
           }
         } catch (e) {
           console.error(`Failed to check status for ${report.id}`, e);
         }
       }
     };
-    
+
     checkStatuses();
     // Optional: Set up an interval or just run on mount
     const interval = setInterval(checkStatuses, 10000); // Check every 10s
@@ -81,7 +81,7 @@ export const MyReports = () => {
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
-          <button 
+          <button
             onClick={() => navigate('/dashboard')}
             className="h-12 w-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:border-zinc-700 transition-all group"
           >
@@ -99,8 +99,8 @@ export const MyReports = () => {
               onClick={() => setFilterStatus(status)}
               className={clsx(
                 "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
-                filterStatus === status 
-                  ? "bg-emerald-500 text-zinc-950 shadow-[0_0_15px_rgba(16,185,129,0.3)]" 
+                filterStatus === status
+                  ? "bg-emerald-500 text-zinc-950 shadow-[0_0_15px_rgba(16,185,129,0.3)]"
                   : "text-zinc-500 hover:text-zinc-300"
               )}
             >
@@ -116,9 +116,9 @@ export const MyReports = () => {
           {/* Search Bar */}
           <div className="relative group">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-emerald-500 transition-colors" size={20} />
-            <input 
-              type="text" 
-              placeholder="Search by report title or IPFS CID..." 
+            <input
+              type="text"
+              placeholder="Search by report title or IPFS CID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-zinc-900/30 border border-zinc-800 rounded-[1.5rem] py-4 pl-12 pr-4 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
@@ -139,8 +139,8 @@ export const MyReports = () => {
                     onClick={() => setSelectedReport(report)}
                     className={clsx(
                       "group p-6 rounded-[2rem] border transition-all cursor-pointer relative overflow-hidden",
-                      selectedReport?.id === report.id 
-                        ? "bg-emerald-500/5 border-emerald-500/40 shadow-[0_0_30px_rgba(16,185,129,0.05)]" 
+                      selectedReport?.id === report.id
+                        ? "bg-emerald-500/5 border-emerald-500/40 shadow-[0_0_30px_rgba(16,185,129,0.05)]"
                         : "bg-zinc-900/20 border-zinc-800/50 hover:border-zinc-700"
                     )}
                   >
@@ -149,8 +149,8 @@ export const MyReports = () => {
                         <div className={clsx(
                           "h-14 w-14 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110",
                           report.status === 'verified' ? "bg-emerald-500/10 text-emerald-500" :
-                          report.status === 'pending' ? "bg-amber-500/10 text-amber-500" :
-                          "bg-red-500/10 text-red-500"
+                            report.status === 'pending' ? "bg-amber-500/10 text-amber-500" :
+                              "bg-red-500/10 text-red-500"
                         )}>
                           <FileText size={28} />
                         </div>
@@ -172,8 +172,8 @@ export const MyReports = () => {
                         <div className={clsx(
                           "px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.15em] flex items-center gap-2 border",
                           report.status === 'verified' ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-500" :
-                          report.status === 'pending' ? "bg-amber-500/5 border-amber-500/20 text-amber-500" :
-                          "bg-red-500/5 border-red-500/20 text-red-500"
+                            report.status === 'pending' ? "bg-amber-500/5 border-amber-500/20 text-amber-500" :
+                              "bg-red-500/5 border-red-500/20 text-red-500"
                         )}>
                           {statusIcons[report.status]}
                           {report.status}
@@ -184,7 +184,7 @@ export const MyReports = () => {
                   </motion.div>
                 ))
               ) : (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="py-24 text-center space-y-6"
@@ -218,12 +218,12 @@ export const MyReports = () => {
                 <div className={clsx(
                   "h-16 w-16 rounded-[1.5rem] flex items-center justify-center shadow-lg",
                   selectedReport.status === 'verified' ? "bg-emerald-500/10 text-emerald-500 shadow-emerald-500/10" :
-                  selectedReport.status === 'pending' ? "bg-amber-500/10 text-amber-500 shadow-amber-500/10" :
-                  "bg-red-500/10 text-red-500 shadow-red-500/10"
+                    selectedReport.status === 'pending' ? "bg-amber-500/10 text-amber-500 shadow-amber-500/10" :
+                      "bg-red-500/10 text-red-500 shadow-red-500/10"
                 )}>
                   <ShieldCheck size={32} />
                 </div>
-                <button 
+                <button
                   onClick={() => setSelectedReport(null)}
                   className="h-10 w-10 rounded-full bg-zinc-800/50 flex items-center justify-center text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 transition-all"
                 >
@@ -245,7 +245,11 @@ export const MyReports = () => {
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <code className="text-xs text-emerald-500 font-mono truncate flex-1">{selectedReport.cid}</code>
-                    <button className="text-zinc-500 hover:text-emerald-500 transition-colors">
+                    <button
+                      className="text-zinc-500 hover:text-emerald-500 transition-colors"
+                      onClick={() => selectedReport.txHash && window.open(`https://sepolia.etherscan.io/tx/${selectedReport.txHash}`, '_blank')}
+                      title="View on Explorer"
+                    >
                       <ExternalLink size={16} />
                     </button>
                   </div>
@@ -256,7 +260,7 @@ export const MyReports = () => {
                   <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] px-1">Verification Timeline</h4>
                   <div className="space-y-8 relative">
                     <div className="absolute left-[15px] top-2 bottom-2 w-[2px] bg-zinc-800" />
-                    
+
                     <div className="flex gap-5 relative z-10">
                       <div className="h-8 w-8 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-500 shrink-0">
                         <Fingerprint size={16} />
@@ -283,9 +287,9 @@ export const MyReports = () => {
                     <div className="flex gap-5 relative z-10">
                       <div className={clsx(
                         "h-8 w-8 rounded-full border flex items-center justify-center shrink-0 transition-colors",
-                        selectedReport.status === 'verified' ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-500" : 
-                        selectedReport.status === 'rejected' ? "bg-red-500/20 border-red-500/30 text-red-500" :
-                        "bg-zinc-900 border-zinc-800 text-zinc-700"
+                        selectedReport.status === 'verified' ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-500" :
+                          selectedReport.status === 'rejected' ? "bg-red-500/20 border-red-500/30 text-red-500" :
+                            "bg-zinc-900 border-zinc-800 text-zinc-700"
                       )}>
                         <AlertCircle size={16} />
                       </div>
@@ -294,7 +298,7 @@ export const MyReports = () => {
                         <p className={clsx(
                           "text-xs font-black uppercase tracking-widest mt-1",
                           selectedReport.status === 'verified' ? "text-emerald-500" :
-                          selectedReport.status === 'rejected' ? "text-red-500" : "text-zinc-600"
+                            selectedReport.status === 'rejected' ? "text-red-500" : "text-zinc-600"
                         )}>
                           {selectedReport.status}
                         </p>
@@ -304,8 +308,10 @@ export const MyReports = () => {
                 </div>
 
                 <div className="pt-4">
-                  <Button className="w-full py-6 text-lg rounded-2xl shadow-xl shadow-emerald-500/5">
-                    <ExternalLink size={20} className="mr-3" /> View Full Evidence
+                  <Button className="w-full py-6 text-lg rounded-2xl shadow-xl shadow-emerald-500/5" onClick={() => window.open(`https://gateway.pinata.cloud/ipfs/${selectedReport.cid}`, '_blank')}>
+                    <div className="flex items-center">
+                      <ExternalLink size={20} className="mr-3" /> <p>View Full Evidence</p>
+                    </div>
                   </Button>
                 </div>
               </div>

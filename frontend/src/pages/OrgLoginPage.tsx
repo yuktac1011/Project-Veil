@@ -135,9 +135,10 @@ export const OrgLoginPage = () => {
               {isLoading ? (
                 <Loader2 className="animate-spin" size={24} />
               ) : (
-                <>
-                  Sign In to Portal <ChevronRight className="ml-2" size={20} />
-                </>
+                <div className="flex items-center gap-2">
+                  <p>Sign In to Portal</p>
+                  <ChevronRight size={20} />
+                </div>
               )}
             </Button>
           </form>

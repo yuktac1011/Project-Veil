@@ -58,7 +58,7 @@ export const AdminDashboard = () => {
         <div className="flex gap-3">
           <div className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center gap-2">
             <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Mainnet Live</span>
+            <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">TestNet Live</span>
           </div>
         </div>
       </div>

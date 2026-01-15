@@ -1,87 +1,73 @@
 import React, { useState, useEffect } from "react";
-import { deriveIdentityFromNullifier } from "../utils/crypto";
 import { motion, AnimatePresence } from "framer-motion";
-import { Shield, Building2 } from "lucide-react";
+import { Shield, Wallet, CheckCircle, Fingerprint } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
-import { PasscodeGrid } from "../components/auth/PasscodeGrid";
 import { Button } from "../components/ui/Button";
 import { useNavigate, Link } from "react-router-dom";
 import { LogInWithAnonAadhaar, useAnonAadhaar } from "@anon-aadhaar/react";
+import { ethers } from "ethers";
 
-type AuthStep = "welcome" | "create" | "passcode" | "unlock" | "recovery";
+type AuthStep = "welcome" | "setup";
 
 export const AuthPage = () => {
-  const { hasVault, unlock, createIdentity } = useAuthStore();
-  const [step, setStep] = useState<AuthStep>(hasVault ? "unlock" : "welcome");
-  const [error, setError] = useState<string>();
-  const [isLoading, setIsLoading] = useState(false);
-
+  const { createIdentity, setWallet, setZkProof, walletAddress, zkProof } = useAuthStore();
+  const [step, setStep] = useState<AuthStep>("welcome");
+  const [isConnecting, setIsConnecting] = useState(false);
+  
   // Anon Aadhaar Hook
   const [anonAadhaar] = useAnonAadhaar();
   const navigate = useNavigate();
 
-
-
-  // ... existing imports ...
-
-  // ...
-
-  // Auto-unlock if vault exists (skipping passcode screen as requested)
+  // Auto-capture Anon Aadhaar Proof
   useEffect(() => {
-    if (hasVault && step !== 'create') {
-      const autoUnlock = async () => {
-        try {
-          await unlock("123456"); // Use the default hardcoded pin
-          navigate("/dashboard");
-        } catch (e) {
-          console.error("Auto-unlock failed", e);
-          // If auto-unlock fails (e.g. data corruption), reset to welcome
-          setStep("welcome");
-        }
-      };
-      autoUnlock();
+    if (anonAadhaar.status === "logged-in") {
+       const proof = anonAadhaar.anonAadhaarProofs ? Object.values(anonAadhaar.anonAadhaarProofs)[0] : null;
+       if (proof) {
+           setZkProof(proof); // Save to store
+       }
     }
-  }, [hasVault, unlock, navigate, step]);
+  }, [anonAadhaar.status, setZkProof, anonAadhaar]);
 
-  // Watch for Anon Aadhaar login status
-  useEffect(() => {
-    // Only auto-create identity if we are in the 'create' step (user explicitly asked to verify)
-    // This prevents an infinite loop where a persisted AA session auto-logs you in after Veil logout
-    if (anonAadhaar.status === "logged-in" && step === 'create') {
-      console.log("✅ Anon Aadhaar Verified!", anonAadhaar);
+  const connectWallet = async () => {
+      setIsConnecting(true);
+      try {
+          if (!(window as any).ethereum) throw new Error("MetaMask not found");
+          const provider = new ethers.BrowserProvider((window as any).ethereum);
+          const accounts = await provider.send("eth_requestAccounts", []);
+          if (accounts.length > 0) setWallet(accounts[0]);
+      } catch (err) {
+          console.error(err);
+      } finally {
+          setIsConnecting(false);
+      }
+  };
 
-      // Extract real identity from the ZK proof
-      const pcdWrapper = Object.values(anonAadhaar.anonAadhaarProofs || {})[0];
+  const handleContinue = async () => {
+      // Create a "User Identity" session.
+      // For MVP, we use a placeholder identity object derived from nullifier or just a session flag.
+      // We'll reuse the existing createIdentity for "logging in" the user in the store.
+      
       let realIdentity = {
-        trapdoor: "PROTECTED_BY_AADHAAR",
-        nullifier: "GENERATED_ON_CHAIN",
-        commitment: "ANON_AADHAAR_USER",
-        publicKey: "0x0",
+        trapdoor: "PROTECTED",
+        nullifier: "UNKNOWN",
+        commitment: "USER",
+        publicKey: walletAddress || "0x0", 
       };
 
-      if (pcdWrapper) {
+      if (zkProof) {
+          // Try to extract nullifier from ZK proof if possible, or just use it as is.
           try {
-             // @ts-ignore
-             const pcd = JSON.parse(pcdWrapper.pcd);
-             const proof = pcd.proof || {};
-             const nullifier = proof.nullifier || pcd.claim?.nullifier;
-             
-             if (nullifier) {
-                 // Use the nullifier as the public interface identity
-                 realIdentity.publicKey = "0x" + BigInt(nullifier).toString(16);
-                 realIdentity.nullifier = nullifier;
-             }
-          } catch (e) {
-              console.error("Failed to parse PCD for identity", e);
-          }
+             const pcd = JSON.parse(zkProof.pcd);
+             const nullifier = pcd.claim?.nullifier;
+             if (nullifier) realIdentity.nullifier = nullifier;
+          } catch(e) {}
       }
 
-      // Auto-create identity in your store
-      // We use a default pin for the MVP flow to reduce friction and strictly rely on Anon Aadhaar
-      createIdentity(realIdentity, "123456");
+      await createIdentity(realIdentity, "123456"); // Auto-login
       navigate("/dashboard");
-    }
-  }, [anonAadhaar.status, createIdentity, navigate, anonAadhaar, step]);
+  };
+
+  const isReady = !!walletAddress && !!zkProof;
 
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col items-center justify-center p-6 relative overflow-hidden">
@@ -115,7 +101,7 @@ export const AuthPage = () => {
               <div className="space-y-4">
                 <Button
                   className="w-full py-6 text-lg"
-                  onClick={() => setStep("create")}
+                  onClick={() => setStep("setup")}
                 >
                   Verify Citizenship
                 </Button>
@@ -133,43 +119,96 @@ export const AuthPage = () => {
             </motion.div>
           )}
 
-          {step === "create" && (
+          {step === "setup" && (
             <motion.div
-              key="create"
+              key="setup"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="space-y-8"
+              className="space-y-6"
             >
-              <div className="space-y-2 text-center">
-                <h2 className="text-2xl font-semibold">Verify Citizenship</h2>
+              <div className="text-center space-y-2">
+                <h2 className="text-2xl font-bold">Identity Setup</h2>
                 <p className="text-zinc-400">
-                  Prove you are a real person using Anon Aadhaar. Your data
-                  remains local and zero-knowledge.
+                    Complete these steps to access the platform.
                 </p>
               </div>
 
-              <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 flex flex-col items-center justify-center gap-6 min-h-[200px]">
-                {/* Anon Aadhaar Login Button */}
-                <div className="scale-110">
-                  <LogInWithAnonAadhaar
-                    nullifierSeed={1234} // Represents your App Action ID
-                    fieldsToReveal={["revealAgeAbove18", "revealPinCode"]}
-                  />
-                </div>
-
-                <p className="text-zinc-500 text-sm text-center">
-                  Scan your Aadhaar QR code to prove citizenship anonymously.
-                </p>
+              {/* 1. Wallet Connection */}
+              <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
+                          <Wallet size={20} />
+                      </div>
+                      <div>
+                          <h3 className="font-medium">Wallet</h3>
+                          <p className="text-xs text-zinc-500">
+                              {walletAddress ? `${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}` : "Connect MetaMask"}
+                          </p>
+                      </div>
+                  </div>
+                  {walletAddress ? (
+                      <CheckCircle className="text-emerald-500" />
+                  ) : (
+                      <Button size="sm" onClick={connectWallet} disabled={isConnecting}>
+                          {isConnecting ? "..." : "Connect"}
+                      </Button>
+                  )}
               </div>
 
-              <Button
-                variant="ghost"
-                className="w-full"
-                onClick={() => setStep("welcome")}
-              >
-                Back
-              </Button>
+              {/* 2. Anon Aadhaar */}
+              <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 flex items-center justify-between">
+                   <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-full bg-orange-500/10 flex items-center justify-center text-orange-500">
+                          <Fingerprint size={20} />
+                      </div>
+                      <div>
+                          <h3 className="font-medium">Citizenship</h3>
+                          <p className="text-xs text-zinc-500">
+                              {zkProof ? "Verified" : "Anon Aadhaar Proof"}
+                          </p>
+                      </div>
+                  </div>
+                   <div className="scale-90 origin-right">
+                        {/* We use the default button but styled small */}
+                        <LogInWithAnonAadhaar 
+                            nullifierSeed={1234} 
+                            fieldsToReveal={["revealAgeAbove18"]} 
+                        />
+                   </div>
+              </div>
+
+               {/* 3. Reclaim (Optional/Placeholder) */}
+               <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 flex items-center justify-between opacity-75">
+                   <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-500">
+                          <Shield size={20} />
+                      </div>
+                      <div>
+                          <h3 className="font-medium">Humanity</h3>
+                          <p className="text-xs text-zinc-500">Reclaim Protocol (Optional)</p>
+                      </div>
+                  </div>
+                   <Button size="sm" variant="ghost" disabled>Verify</Button>
+              </div>
+
+              <div className="pt-4 space-y-3">
+                  <Button 
+                    className="w-full py-6 text-lg" 
+                    onClick={handleContinue}
+                    disabled={!isReady}
+                  >
+                    Enter Veil
+                  </Button>
+                  
+                  <Button
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => setStep("welcome")}
+                  >
+                    Back
+                  </Button>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
