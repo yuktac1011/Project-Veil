@@ -5,11 +5,12 @@ import {
   Shield, 
   Settings, 
   FileText, 
-  Lock,
-  Bell,
+  LogOut,
   Zap
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { useAuthStore } from '../../store/useAuthStore';
+import { useNavigate } from 'react-router-dom';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -18,6 +19,19 @@ const navigation = [
 ];
 
 export const Sidebar = () => {
+  const { logout } = useAuthStore();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    // Clear local auth state
+    logout();
+    
+    // Clear Anon Aadhaar storage if any (it typically uses local storage)
+    localStorage.removeItem("anon-aadhaar-storage");
+    
+    // Redirect to auth page
+    navigate('/auth');
+  };
   return (
     <aside className="w-64 border-r border-zinc-800 bg-zinc-950 flex flex-col h-full">
       <div className="p-6 flex items-center gap-3">
@@ -63,6 +77,14 @@ export const Sidebar = () => {
           <Settings size={18} />
           Settings
         </NavLink>
+
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2 mt-1 rounded-xl text-sm font-medium text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-all text-left"
+        >
+          <LogOut size={18} />
+          Log Out
+        </button>
       </div>
     </aside>
   );

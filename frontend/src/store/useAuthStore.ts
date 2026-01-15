@@ -77,7 +77,6 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'veil-auth-storage',
       partialize: (state) => ({ 
-        hasVault: state.hasVault,
         orgIdentity: state.orgIdentity,
         userRole: state.userRole
       }),

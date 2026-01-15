@@ -26,9 +26,28 @@ export const AuthPage = () => {
 
   // ...
 
+  // Auto-unlock if vault exists (skipping passcode screen as requested)
+  useEffect(() => {
+    if (hasVault && step !== 'create') {
+      const autoUnlock = async () => {
+        try {
+          await unlock("123456"); // Use the default hardcoded pin
+          navigate("/dashboard");
+        } catch (e) {
+          console.error("Auto-unlock failed", e);
+          // If auto-unlock fails (e.g. data corruption), reset to welcome
+          setStep("welcome");
+        }
+      };
+      autoUnlock();
+    }
+  }, [hasVault, unlock, navigate, step]);
+
   // Watch for Anon Aadhaar login status
   useEffect(() => {
-    if (anonAadhaar.status === "logged-in") {
+    // Only auto-create identity if we are in the 'create' step (user explicitly asked to verify)
+    // This prevents an infinite loop where a persisted AA session auto-logs you in after Veil logout
+    if (anonAadhaar.status === "logged-in" && step === 'create') {
       console.log("✅ Anon Aadhaar Verified!", anonAadhaar);
 
       // Extract real identity from the ZK proof
@@ -58,24 +77,11 @@ export const AuthPage = () => {
       }
 
       // Auto-create identity in your store
-      // We use a default pin for the MVP flow, but in production, you might ask the user to set one
+      // We use a default pin for the MVP flow to reduce friction and strictly rely on Anon Aadhaar
       createIdentity(realIdentity, "123456");
       navigate("/dashboard");
     }
-  }, [anonAadhaar.status, createIdentity, navigate, anonAadhaar]);
-
-  const handleUnlock = async (passcode: string) => {
-    setIsLoading(true);
-    setError(undefined);
-    try {
-      await unlock(passcode);
-      navigate("/dashboard");
-    } catch (e) {
-      setError("Invalid passcode. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [anonAadhaar.status, createIdentity, navigate, anonAadhaar, step]);
 
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col items-center justify-center p-6 relative overflow-hidden">
@@ -114,14 +120,7 @@ export const AuthPage = () => {
                   Verify Citizenship
                 </Button>
                 <div className="grid grid-cols-2 gap-4">
-                  <Button
-                    variant="ghost"
-                    className="w-full"
-                    onClick={() => setStep("recovery")}
-                  >
-                    Restore Vault
-                  </Button>
-                  <Link to="/auth/org" className="w-full">
+                  <Link to="/auth/org" className="w-full col-span-2">
                     <Button
                       variant="ghost"
                       className="w-full border border-zinc-800"
@@ -171,62 +170,6 @@ export const AuthPage = () => {
               >
                 Back
               </Button>
-            </motion.div>
-          )}
-
-          {step === "passcode" && (
-            // Passcode step kept if you want to implement custom PIN later
-            // Currently bypassed by the useEffect
-            <motion.div
-              key="passcode"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="space-y-8 text-center"
-            >
-              <div className="space-y-2">
-                <h2 className="text-2xl font-semibold">Set Vault Passcode</h2>
-                <p className="text-zinc-400">
-                  This passcode will be used to unlock your identity on this
-                  device.
-                </p>
-              </div>
-            </motion.div>
-          )}
-
-          {step === "unlock" && (
-            <motion.div
-              key="unlock"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="space-y-8 text-center"
-            >
-              <div className="flex justify-center mb-4">
-                <div className="h-16 w-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center">
-                  <Shield className="text-emerald-500" size={32} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <h2 className="text-2xl font-semibold">Welcome Back</h2>
-                <p className="text-zinc-400">
-                  Enter passcode to unlock your vault
-                </p>
-              </div>
-              <PasscodeGrid onComplete={handleUnlock} error={error} />
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => setStep("recovery")}
-                  className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
-                >
-                  Forgot passcode? Restore identity
-                </button>
-                <Link
-                  to="/auth/org"
-                  className="text-zinc-600 hover:text-zinc-400 text-xs transition-colors flex items-center justify-center gap-2 mt-4"
-                >
-                  <Building2 size={14} />
-                  Switch to Organization Portal
-                </Link>
-              </div>
             </motion.div>
           )}
         </AnimatePresence>
